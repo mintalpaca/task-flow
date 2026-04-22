@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlowDesk – 구글 드라이브 연동</title>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f13;
+    --surface: #17171e;
+    --surface2: #1e1e28;
+    --border: #2a2a38;
+    --accent-work: #f97316;
+    --accent-life: #34d399;
+    --accent-learn: #818cf8;
+    --accent-health: #f472b6;
+    --text: #e8e8f0;
+    --muted: #6b7280;
+    --white: #ffffff;
+    --radius: 14px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+  }
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 600px 400px at 10% 20%, rgba(129,140,248,0.07) 0%, transparent 70%),
+      radial-gradient(ellipse 500px 300px at 90% 80%, rgba(249,115,22,0.06) 0%, transparent 70%);
+    pointer-events:none; z-index:0;
+  }
+  .app { position:relative; z-index:1; max-width:860px; margin:0 auto; padding:32px 20px 80px; }
+
+  /* Header */
+  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+  .logo { font-family:'Gowun Dodum',serif; font-size:1.6rem; color:var(--white); }
+  .logo span { color:var(--accent-learn); }
+  .header-right { display:flex; align-items:center; gap:10px; }
+  .date-badge {
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:50px; padding:6px 14px; font-size:0.8rem; color:var(--muted);
+  }
+  .sync-btn {
+    padding:7px 16px; border-radius:50px; border:1px solid var(--border);
+    background:var(--surface2); color:var(--text); font-size:0.8rem;
+    cursor:pointer; font-family:inherit; transition:all 0.2s; display:flex; align-items:center; gap:6px;
+  }
+  .sync-btn:hover { border-color:var(--accent-learn); color:var(--accent-learn); }
+  .sync-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .sync-icon { font-size:0.9rem; }
+  .sync-icon.spinning { animation: spin 1s linear infinite; display:inline-block; }
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+  /* Sync status bar */
+  .sync-status {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px 18px;
+    margin-bottom:20px;
+    display:flex; align-items:center; gap:10px; font-size:0.83rem;
+    animation: fadeIn 0.3s ease;
+  }
+  .sync-status.success { border-color: rgba(52,211,153,0.4); }
+  .sync-status.error   { border-color: rgba(248,113,113,0.4); }
+  .sync-status.info    { border-color: rgba(129,140,248,0.4); }
+  .sync-status.loading { border-color: rgba(251,191,36,0.4); }
+  .status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .sync-status.success .status-dot { background:var(--accent-life); }
+  .sync-status.error   .status-dot { background:#f87171; }
+  .sync-status.info    .status-dot { background:var(--accent-learn); }
+  .sync-status.loading .status-dot { background:#fbbf24; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .status-text { flex:1; color:var(--text); }
+  .status-sub  { font-size:0.74rem; color:var(--muted); margin-top:2px; }
+
+  /* Stats */
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+  .stat-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px; text-align:center;
+    transition:transform 0.2s;
+  }
+  .stat-card:hover { transform:translateY(-2px); }
+  .stat-card.work   { border-top:3px solid var(--accent-work); }
+  .stat-card.life   { border-top:3px solid var(--accent-life); }
+  .stat-card.learn  { border-top:3px solid var(--accent-learn); }
+  .stat-card.health { border-top:3px solid var(--accent-health); }
+  .stat-num { font-size:1.8rem; font-weight:700; line-height:1; }
+  .stat-label { font-size:0.72rem; color:var(--muted); margin-top:4px; }
+  .stat-card.work   .stat-num { color:var(--accent-work); }
+  .stat-card.life   .stat-num { color:var(--accent-life); }
+  .stat-card.learn  .stat-num { color:var(--accent-learn); }
+  .stat-card.health .stat-num { color:var(--accent-health); }
+
+  /* Progress */
+  .progress-section { margin-bottom:24px; }
+  .progress-header { display:flex; justify-content:space-between; font-size:0.8rem; color:var(--muted); margin-bottom:8px; }
+  .progress-bar { height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; }
+  .progress-fill { height:100%; background:linear-gradient(90deg,var(--accent-learn),var(--accent-health)); border-radius:3px; transition:width 0.5s ease; }
+
+  /* Add form */
+  .add-form {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:20px; margin-bottom:24px;
+    animation:slideDown 0.3s ease;
+  }
+  @keyframes slideDown { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+  .form-row { display:flex; gap:10px; flex-wrap:wrap; }
+  .form-row input[type="text"] {
+    flex:1; min-width:160px;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:9px; padding:10px 14px; color:var(--text);
+    font-family:inherit; font-size:0.9rem; outline:none; transition:border-color 0.2s;
+  }
+  .form-row input[type="text"]:focus { border-color:var(--accent-learn); }
+  .form-row input[type="date"] {
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:9px; padding:10px 12px; color:var(--text);
+    font-family:inherit; font-size:0.85rem; outline:none; color-scheme:dark;
+  }
+  .category-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+  .cat-btn {
+    padding:6px 14px; border-radius:50px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-size:0.78rem;
+    cursor:pointer; transition:all 0.18s; font-family:inherit;
+  }
+  .cat-btn.active.work   { background:var(--accent-work);  border-color:var(--accent-work);  color:#fff; }
+  .cat-btn.active.life   { background:var(--accent-life);  border-color:var(--accent-life);  color:#0f0f13; }
+  .cat-btn.active.learn  { background:var(--accent-learn); border-color:var(--accent-learn); color:#fff; }
+  .cat-btn.active.health { background:var(--accent-health);border-color:var(--accent-health);color:#fff; }
+  .priority-row { display:flex; gap:6px; margin-top:10px; align-items:center; }
+  .priority-row span { font-size:0.78rem; color:var(--muted); }
+  .pri-btn {
+    padding:5px 12px; border-radius:50px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-size:0.75rem;
+    cursor:pointer; transition:all 0.18s; font-family:inherit;
+  }
+  .pri-btn.active { background:var(--surface2); color:var(--text); border-color:var(--text); }
+  .add-btn {
+    margin-top:14px; width:100%; padding:12px; border-radius:10px; border:none;
+    background:linear-gradient(135deg,var(--accent-learn),#6d28d9);
+    color:#fff; font-size:0.9rem; font-weight:500; cursor:pointer;
+    font-family:inherit; transition:opacity 0.2s, transform 0.15s;
+  }
+  .add-btn:hover { opacity:0.9; transform:scale(1.01); }
+
+  /* Filter bar */
+  .filter-bar { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
+  .filter-btn {
+    padding:7px 16px; border-radius:50px; border:1px solid var(--border);
+    background:transparent; color:var(--muted); font-size:0.8rem;
+    cursor:pointer; transition:all 0.18s; font-family:inherit;
+  }
+  .filter-btn.active { background:var(--surface2); color:var(--text); border-color:var(--accent-learn); }
+  .new-task-btn {
+    margin-left:auto; padding:8px 18px; border-radius:50px; border:none;
+    background:var(--accent-learn); color:#fff; font-size:0.82rem;
+    font-weight:600; cursor:pointer; font-family:inherit; transition:opacity 0.2s;
+  }
+  .new-task-btn:hover { opacity:0.85; }
+
+  /* Task list */
+  .section-title { font-size:0.72rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; padding-left:4px; }
+  .task-list { display:flex; flex-direction:column; gap:8px; margin-bottom:32px; }
+  .task-item {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:14px 16px;
+    display:flex; align-items:center; gap:12px;
+    transition:transform 0.18s, border-color 0.2s, opacity 0.3s;
+    animation:fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .task-item:hover { transform:translateX(3px); border-color:#3a3a50; }
+  .task-item.done { opacity:0.45; }
+  .task-check {
+    width:20px; height:20px; border-radius:6px; border:2px solid var(--border);
+    cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    transition:all 0.2s; font-size:0.7rem;
+  }
+  .task-check.work   { border-color:var(--accent-work); }
+  .task-check.life   { border-color:var(--accent-life); }
+  .task-check.learn  { border-color:var(--accent-learn); }
+  .task-check.health { border-color:var(--accent-health); }
+  .task-check.checked.work   { background:var(--accent-work);  border-color:var(--accent-work); }
+  .task-check.checked.life   { background:var(--accent-life);  border-color:var(--accent-life); }
+  .task-check.checked.learn  { background:var(--accent-learn); border-color:var(--accent-learn); }
+  .task-check.checked.health { background:var(--accent-health);border-color:var(--accent-health); }
+  .task-check.checked::after { content:'✓'; color:#fff; font-size:0.75rem; font-weight:700; }
+  .task-check.checked.life::after { color:#0f0f13; }
+  .task-content { flex:1; min-width:0; }
+  .task-title { font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .task-item.done .task-title { text-decoration:line-through; }
+  .task-meta { display:flex; gap:8px; margin-top:4px; align-items:center; }
+  .tag { font-size:0.68rem; padding:2px 8px; border-radius:50px; font-weight:500; }
+  .tag.work   { background:rgba(249,115,22,0.15); color:var(--accent-work); }
+  .tag.life   { background:rgba(52,211,153,0.15);  color:var(--accent-life); }
+  .tag.learn  { background:rgba(129,140,248,0.15); color:var(--accent-learn); }
+  .tag.health { background:rgba(244,114,182,0.15); color:var(--accent-health); }
+  .due-text { font-size:0.7rem; color:var(--muted); }
+  .due-text.overdue { color:#f87171; }
+  .pri-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .pri-dot.high   { background:#f87171; }
+  .pri-dot.medium { background:#fbbf24; }
+  .pri-dot.low    { background:#6b7280; }
+  .delete-btn {
+    background:none; border:none; color:var(--muted); cursor:pointer;
+    font-size:1rem; opacity:0; transition:opacity 0.2s, color 0.2s; padding:4px;
+  }
+  .task-item:hover .delete-btn { opacity:1; }
+  .delete-btn:hover { color:#f87171; }
+  .empty-state { text-align:center; padding:40px 20px; color:var(--muted); font-size:0.85rem; }
+  .empty-state .icon { font-size:2.5rem; margin-bottom:10px; }
+
+  @media(max-width:600px){
+    .stats { grid-template-columns:repeat(2,1fr); }
+    header { flex-direction:column; align-items:flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">Flow<span>Desk</span> <span style="font-size:0.7rem;color:var(--muted);font-family:'Noto Sans KR'">+ Drive</span></div>
+    <div class="header-right">
+      <div class="date-badge" id="dateBadge"></div>
+      <button class="sync-btn" id="syncBtn" onclick="syncDrive()">
+        <span class="sync-icon" id="syncIcon">☁</span> 동기화
+      </button>
+    </div>
+  </header>
+
+  <div class="sync-status info" id="syncStatus">
+    <div class="status-dot"></div>
+    <div>
+      <div class="status-text">구글 드라이브에 연결 중...</div>
+      <div class="status-sub">처음 로드 시 Drive에서 데이터를 불러옵니다</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card work"><div class="stat-num" id="cnt-work">0</div><div class="stat-label">💼 업무</div></div>
+    <div class="stat-card life"><div class="stat-num" id="cnt-life">0</div><div class="stat-label">🏠 개인생활</div></div>
+    <div class="stat-card learn"><div class="stat-num" id="cnt-learn">0</div><div class="stat-label">📚 학습</div></div>
+    <div class="stat-card health"><div class="stat-num" id="cnt-health">0</div><div class="stat-label">💪 건강</div></div>
+  </div>
+
+  <div class="progress-section">
+    <div class="progress-header">
+      <span>오늘의 진행률</span>
+      <span id="progressText">0 / 0 완료</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all',this)">전체</button>
+    <button class="filter-btn" onclick="setFilter('work',this)">💼 업무</button>
+    <button class="filter-btn" onclick="setFilter('life',this)">🏠 개인</button>
+    <button class="filter-btn" onclick="setFilter('learn',this)">📚 학습</button>
+    <button class="filter-btn" onclick="setFilter('health',this)">💪 건강</button>
+    <button class="filter-btn" onclick="setFilter('done',this)">✅ 완료</button>
+    <button class="new-task-btn" onclick="toggleForm()">+ 할일 추가</button>
+  </div>
+
+  <div class="add-form" id="addForm" style="display:none">
+    <div class="form-row">
+      <input type="text" id="taskTitle" placeholder="할 일을 입력하세요..." />
+      <input type="date" id="taskDue" />
+    </div>
+    <div class="category-tabs">
+      <button class="cat-btn active work" data-cat="work" onclick="selectCat(this)">💼 업무/프로젝트</button>
+      <button class="cat-btn life" data-cat="life" onclick="selectCat(this)">🏠 개인생활</button>
+      <button class="cat-btn learn" data-cat="learn" onclick="selectCat(this)">📚 학습/자기계발</button>
+      <button class="cat-btn health" data-cat="health" onclick="selectCat(this)">💪 건강/운동</button>
+    </div>
+    <div class="priority-row">
+      <span>우선순위</span>
+      <button class="pri-btn active" data-pri="high" onclick="selectPri(this)">🔴 높음</button>
+      <button class="pri-btn" data-pri="medium" onclick="selectPri(this)">🟡 보통</button>
+      <button class="pri-btn" data-pri="low" onclick="selectPri(this)">⚪ 낮음</button>
+    </div>
+    <button class="add-btn" onclick="addTask()">할 일 추가하기</button>
+  </div>
+
+  <div class="section-title">할 일 목록</div>
+  <div class="task-list" id="taskList"></div>
+</div>
+
+<script>
+  // ─── State ───────────────────────────────────────────────────────
+  let tasks = [];
+  let driveFileId = null;
+  let selectedCat = 'work';
+  let selectedPri = 'high';
+  let currentFilter = 'all';
+  let formOpen = false;
+  let saveTimer = null;
+  const DRIVE_FILENAME = 'flowdesk-tasks.json';
+
+  // Date badge
+  const now = new Date();
+  const days = ['일','월','화','수','목','금','토'];
+  document.getElementById('dateBadge').textContent =
+    `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 (${days[now.getDay()]})`;
+
+  // ─── Status UI ───────────────────────────────────────────────────
+  function setStatus(type, text, sub='') {
+    const el = document.getElementById('syncStatus');
+    el.className = 'sync-status ' + type;
+    el.innerHTML = `<div class="status-dot"></div><div><div class="status-text">${text}</div>${sub ? `<div class="status-sub">${sub}</div>` : ''}</div>`;
+  }
+
+  // ─── Claude API + Drive MCP ──────────────────────────────────────
+  async function callClaudeWithDrive(userPrompt, systemPrompt) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+        mcp_servers: [{
+          type: 'url',
+          url: 'https://drivemcp.googleapis.com/mcp/v1',
+          name: 'google-drive'
+        }]
+      })
+    });
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    return await response.json();
+  }
+
+  // ─── Load from Drive ─────────────────────────────────────────────
+  async function loadFromDrive() {
+    setStatus('loading', '구글 드라이브에서 불러오는 중...', DRIVE_FILENAME + ' 파일 검색 중');
+    try {
+      const data = await callClaudeWithDrive(
+        `Search for a file named "${DRIVE_FILENAME}" in Google Drive. If found, read its content and return ONLY a JSON object like: {"found": true, "fileId": "...", "content": <parsed JSON array>}. If not found, return ONLY: {"found": false}. No explanation, no markdown, just raw JSON.`,
+        'You are a Google Drive file assistant. Always respond with raw JSON only. No markdown, no explanation.'
+      );
+
+      // Extract text from response
+      const textBlocks = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      const clean = textBlocks.replace(/```json|```/g, '').trim();
+
+      let result;
+      try { result = JSON.parse(clean); }
+      catch { result = { found: false }; }
+
+      if (result.found && Array.isArray(result.content)) {
+        tasks = result.content;
+        driveFileId = result.fileId || null;
+        setStatus('success', '✅ 드라이브에서 불러오기 완료', `${tasks.length}개 할일 동기화됨`);
+      } else {
+        // New user — start fresh
+        tasks = getDefaultTasks();
+        setStatus('info', '☁ 새 파일 생성됨', '첫 동기화 시 드라이브에 저장됩니다');
+        await saveToDrive(); // auto-create file
+      }
+    } catch(e) {
+      console.error(e);
+      // Fallback to localStorage
+      const local = localStorage.getItem('flowdesk-tasks');
+      tasks = local ? JSON.parse(local) : getDefaultTasks();
+      setStatus('error', '⚠ 드라이브 연결 실패 — 로컬 데이터 사용 중', '동기화 버튼으로 재시도하세요');
+    }
+    render();
+  }
+
+  // ─── Save to Drive ───────────────────────────────────────────────
+  async function saveToDrive() {
+    const btn = document.getElementById('syncBtn');
+    const icon = document.getElementById('syncIcon');
+    btn.disabled = true;
+    icon.classList.add('spinning');
+    setStatus('loading', '구글 드라이브에 저장 중...');
+
+    // Also save locally as fallback
+    localStorage.setItem('flowdesk-tasks', JSON.stringify(tasks));
+
+    try {
+      const jsonContent = JSON.stringify(tasks, null, 2);
+      const prompt = driveFileId
+        ? `Update the Google Drive file with ID "${driveFileId}" with this JSON content:\n\n${jsonContent}\n\nReturn ONLY: {"success": true, "fileId": "${driveFileId}"}`
+        : `Create a new file named "${DRIVE_FILENAME}" in Google Drive with this JSON content:\n\n${jsonContent}\n\nReturn ONLY: {"success": true, "fileId": "<new file id>"}`;
+
+      const data = await callClaudeWithDrive(prompt,
+        'You are a Google Drive file assistant. Always respond with raw JSON only. No markdown, no explanation.'
+      );
+
+      const textBlocks = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      const clean = textBlocks.replace(/```json|```/g, '').trim();
+      let result;
+      try { result = JSON.parse(clean); } catch { result = { success: false }; }
+
+      if (result.success) {
+        if (result.fileId) driveFileId = result.fileId;
+        const t = new Date(); const hm = `${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}`;
+        setStatus('success', `✅ 드라이브에 저장 완료`, `마지막 저장: ${hm} · ${tasks.length}개 항목`);
+      } else {
+        setStatus('error', '⚠ 드라이브 저장 실패', '로컬에는 저장되었습니다');
+      }
+    } catch(e) {
+      console.error(e);
+      setStatus('error', '⚠ 드라이브 저장 실패', '로컬에는 저장되었습니다');
+    } finally {
+      btn.disabled = false;
+      icon.classList.remove('spinning');
+    }
+  }
+
+  // Auto-save with debounce (3s after last change)
+  function scheduleAutoSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveToDrive(), 3000);
+    setStatus('info', '변경사항 있음...', '3초 후 자동 저장됩니다');
+  }
+
+  async function syncDrive() { await saveToDrive(); }
+
+  // ─── Default Tasks ───────────────────────────────────────────────
+  function getDefaultTasks() {
+    const today = new Date().toISOString().split('T')[0];
+    return [
+      { id: 1, title: '주간 업무 보고서 작성', cat:'work',   pri:'high',   due:today, done:false },
+      { id: 2, title: '독서 30분',              cat:'learn',  pri:'medium', due:'',    done:false },
+      { id: 3, title: '저녁 러닝 5km',          cat:'health', pri:'medium', due:today, done:false },
+      { id: 4, title: '장보기',                  cat:'life',   pri:'low',   due:'',    done:false },
+    ];
+  }
+
+  // ─── UI Actions ──────────────────────────────────────────────────
+  function toggleForm() {
+    formOpen = !formOpen;
+    document.getElementById('addForm').style.display = formOpen ? 'block' : 'none';
+  }
+  function selectCat(btn) {
+    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); selectedCat = btn.dataset.cat;
+  }
+  function selectPri(btn) {
+    document.querySelectorAll('.pri-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); selectedPri = btn.dataset.pri;
+  }
+  function setFilter(f, btn) {
+    currentFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); render();
+  }
+  function addTask() {
+    const title = document.getElementById('taskTitle').value.trim();
+    if (!title) { document.getElementById('taskTitle').focus(); return; }
+    tasks.unshift({ id: Date.now(), title, cat:selectedCat, pri:selectedPri,
+      due:document.getElementById('taskDue').value, done:false });
+    document.getElementById('taskTitle').value = '';
+    document.getElementById('taskDue').value = '';
+    render(); scheduleAutoSave();
+  }
+  function toggleDone(id) {
+    const t = tasks.find(t => t.id === id);
+    if (t) { t.done = !t.done; render(); scheduleAutoSave(); }
+  }
+  function deleteTask(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    render(); scheduleAutoSave();
+  }
+
+  // ─── Render ──────────────────────────────────────────────────────
+  const catLabel = c => ({work:'💼 업무',life:'🏠 개인',learn:'📚 학습',health:'💪 건강'}[c]||c);
+  const isOverdue = due => { if(!due) return false; const d=new Date(); d.setHours(0,0,0,0); return new Date(due)<d; };
+
+  function render() {
+    ['work','life','learn','health'].forEach(cat =>
+      document.getElementById('cnt-'+cat).textContent = tasks.filter(t=>t.cat===cat&&!t.done).length
+    );
+    const total=tasks.length, done=tasks.filter(t=>t.done).length;
+    document.getElementById('progressText').textContent = `${done} / ${total} 완료`;
+    document.getElementById('progressFill').style.width = total ? (done/total*100)+'%' : '0%';
+
+    let filtered = currentFilter==='done' ? tasks.filter(t=>t.done)
+      : currentFilter==='all' ? tasks.filter(t=>!t.done)
+      : tasks.filter(t=>t.cat===currentFilter&&!t.done);
+
+    const list = document.getElementById('taskList');
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty-state"><div class="icon">🎉</div>${currentFilter==='done'?'완료된 할일이 없어요':'할일이 없어요! 추가해보세요'}</div>`;
+      return;
+    }
+    const po = {high:0,medium:1,low:2};
+    filtered.sort((a,b)=>{
+      if(a.done!==b.done) return a.done?1:-1;
+      if(po[a.pri]!==po[b.pri]) return po[a.pri]-po[b.pri];
+      if(a.due&&b.due) return a.due.localeCompare(b.due);
+      return a.due?-1:b.due?1:0;
+    });
+    list.innerHTML = filtered.map(t => {
+      const ov = isOverdue(t.due)&&!t.done;
+      const dueStr = t.due ? `<span class="due-text ${ov?'overdue':''}">${ov?'⚠ 기한 초과: ':'📅 '}${t.due}</span>` : '';
+      return `<div class="task-item ${t.done?'done':''}">
+        <div class="task-check ${t.cat} ${t.done?'checked':''}" onclick="toggleDone(${t.id})"></div>
+        <div class="task-content">
+          <div class="task-title">${t.title}</div>
+          <div class="task-meta">
+            <span class="tag ${t.cat}">${catLabel(t.cat)}</span>
+            <div class="pri-dot ${t.pri}"></div>
+            ${dueStr}
+          </div>
+        </div>
+        <button class="delete-btn" onclick="deleteTask(${t.id})" title="삭제">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  document.addEventListener('keydown', e => { if(e.key==='Enter'&&formOpen) addTask(); });
+
+  // ─── Init ────────────────────────────────────────────────────────
+  loadFromDrive();
+</script>
+</body>
+</html>
